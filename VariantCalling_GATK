@@ -1,0 +1,87 @@
+#load softwares needed
+module load gatk
+module load samtools
+
+gatk CreateSequenceDictionary -R hapA.fasta
+samtools faidx hapA.fasta
+
+####SRS input file
+name=$(sed -n ${SLURM_ARRAY_TASK_ID}p job.list)
+picard AddOrReplaceReadGroups \
+I= ${name}.markdup.bam \
+O= ${name}.RG.bam \
+ID=${name} \
+SM=${name} \
+LB=${name} \
+PL=DNBseq \
+PU=BREEY \
+VALIDATION_STRINGENCY=SILENT
+
+####LRS input file
+name=$(sed -n ${SLURM_ARRAY_TASK_ID}p job.list)
+picard AddOrReplaceReadGroups \
+I= ${name}.sort.bam \
+O= ${name}.RG.bam \
+ID=${name} \
+SM=${name} \
+LB=${name} \
+PL=PACBIO \
+PU=ANNO \
+VALIDATION_STRINGENCY=SILENT
+
+#####Variant Calling
+
+samtools index ${name}.RG.bam
+
+gatk --java-options "-Xmx8g" HaplotypeCaller \
+         -R hapA.fasta \
+         -I ${name}.RG.bam \
+         -O ./02.vcf/${name}.g.vcf.gz \
+         -ERC GVCF \
+         --tmp-dir ./tmp/ \
+         -A AlleleFraction \
+         -A DepthPerSampleHC \
+         -A Coverage \
+         -A BaseQuality \
+         -A AS_BaseQualityRankSumTest \
+         -A MappingQuality \
+         -A FisherStrand
+
+# Set the input file to process
+name=$(sed -n ${SLURM_ARRAY_TASK_ID}p T4.list)
+mom=T4dam
+dad=T4sire
+
+module load gatk
+         
+gatk --java-options "-Xmx15g" CombineGVCFs  \
+   -R hapA.fasta \
+   --variant ./02.vcf/${mom}.g.vcf.gz \
+   --variant ./02.vcf/${dad}.g.vcf.gz \
+   --variant ./02.vcf/${name}.g.vcf.gz \
+   -O Trio_${name}.g.vcf.gz \
+   --tmp-dir ./tmp
+
+gatk --java-options "-Xmx15g" GenotypeGVCFs \
+   -R hapA.fasta \
+   -V Trio_${name}.g.vcf.gz \
+   -O Trio_${name}.vcf.gz \
+   --tmp-dir ./tmp
+
+gatk SelectVariants \
+    -V Trio_${name}.vcf.gz \
+    -select-type SNP \
+    -O Trio_${name}_snp.vcf.gz
+
+gatk VariantFiltration \
+    -V Trio_${name}_snp.vcf.gz \
+    -filter "QD < 2.0" --filter-name "QD2" \
+    -filter "SOR > 3.0" --filter-name "SOR3" \
+    -filter "FS > 60.0" --filter-name "FS60" \
+    -filter "MQ < 40.0" --filter-name "MQ40" \
+    -filter "MQRankSum < -12.5" --filter-name "MQRankSum-12.5" \
+    -filter "ReadPosRankSum < -8.0" --filter-name "ReadPosRankSum-8" \
+    -O Trio_${name}_snp_addfilter.vcf.gz
+
+bcftools view  -i 'FILTER="PASS"' Trio_${name}_snp_addfilter.vcf.gz --regions auto.bed | bgzip -c > Trio_${name}_ats_snp_filtered.vcf.gz
+tabix -p vcf Trio_${name}_ats_snp_filtered.vcf.gz
