@@ -1,0 +1,37 @@
+###GATK
+# Take 1 offspring as an example:
+# Be aware of the order of the trio and adjust the position of the offspring
+### first "awk" - Offspring be het and parents be hom
+### second "awk" - GQ > 80
+### third "awk" - 0.5DP < DP < 2DP
+### forth "awk" - 0.3 < AB < 0.7
+### Fifth "awk" - Ensure the real homozygosity for the two parents AD1 > 0 and AD2 = 0
+
+module load biokit
+
+bcftools query -f '%CHROM %POS %TYPE %REF %ALT{0} %AF{0}[ %GT][ %GQ][ %DP][ %AD{0} %AD{1}]\n' sample.vcf.gz \
+| awk '($9 == "0|0" || $9 == "0/0") && ($8 == "0|0" || $8 == "0/0")&& ($7 == "0/1" || $7 == "0|1")'  \ 
+| awk '$12 >= 80 && $11 >= 80 && $10 >= 80' \
+| awk '$15 > 16 && $14 > 16 && $13 > 16 && $15 < 66 && $14 < 65 && $13 < 65'  \
+| awk '$21 <= 0 && $19 <= 0 && $20 > 0 && $18 > 0 ' \
+| awk '{ADsum = $16 + $17; if($17 >= 0.3*ADsum && $17 <= 0.7*ADsum){print $0}}' > sample_fted.vcf
+
+#####################################################################################################################################
+
+###DeepVariant & DeepTrio
+# Take 1 offspring as an example:
+# Be aware of the order of the trio and adjust the position of the offspring
+### first "awk" - Offspring be het and parents be hom
+### second "awk" - Offspring GQ > 10, Parent GQ > 30
+### third "awk" - 0.5DP < DP < 2DP
+### forth "awk" - 0.3 < AB < 0.7
+### Fifth "awk" - Ensure the real homozygosity for the two parents AD1 > 0 and AD2 = 0
+
+module load biokit
+
+bcftools query -f '%CHROM %POS %TYPE %REF %ALT{0} %AF{0}[ %GT][ %GQ][ %DP][ %AD{0} %AD{1}]\n' sample.vcf.gz \
+| awk '($9 == "0|0" || $9 == "0/0") && ($8 == "0|0" || $8 == "0/0")&& ($7 == "0/1" || $7 == "0|1")'  \ 
+| awk '$12 >= 30 && $11 >= 30 && $10 >= 10' \
+| awk '$15 > 16 && $14 > 16 && $13 > 16 && $15 < 66 && $14 < 65 && $13 < 65'  \
+| awk '$21 <= 0 && $19 <= 0 && $20 > 0 && $18 > 0 ' \
+| awk '{ADsum = $16 + $17; if($17 >= 0.3*ADsum && $17 <= 0.7*ADsum){print $0}}' > sample_fted.vcf
