@@ -1,0 +1,14 @@
+## set the input file to process
+ind=$(sed -n ${SLURM_ARRAY_TASK_ID}p T4_offspring.txt)
+module load biokit
+
+### The total number of heterozygous sites that the offspring was 0/1 with one parent carrying 0/0 and the other having 1/1
+bcftools query -f '%CHROM %POS %TYPE %REF %ALT{0} %AF{0}[ %GT][ %GQ][ %DP][ %AD{0} %AD{1}]\n' ${ind}_Trio.snp.recode.vcf \
+| awk '(($7 == "0|1" || $7 == "0/1") && ($8 == "1|1" || $8 == "1/1") && ($9 == "0/0" || $9 == "0|0"))|| (($8 == "0|0" || $8 == "0/0") && ($7 == "0|1" || $7 == "0/1") && ($9 == "1/1" || $9 == "1|1"))' > ${ind}_Trio.snp_HET.vcf
+cat ${ind}_Trio.snp_HET.vcf | wc -l > ${ind}_FNR_Denominator.txt
+
+###true heterozygotes that did not pass the above AB filter (AB < 0.3 and AB > 0.7)
+bcftools query -f '%CHROM %POS %TYPE %REF %ALT{0} %AF{0}[ %GT][ %GQ][ %DP][ %AD{0} %AD{1}]\n' ${ind}_Trio.snp.recode.vcf \
+| awk '(($7 == "0|1" || $7 == "0/1") && ($8 == "1|1" || $8 == "1/1") && ($9 == "0/0" || $9 == "0|0"))|| (($8 == "0|0" || $8 == "0/0") && ($7 == "0|1" || $7 == "0/1") && ($9 == "1/1" || $9 == "1|1"))' \
+| awk '{ADsum = $16 + $17; if($17 <= 0.3*ADsum || $17 >= 0.7*ADsum){print $0}}' > ${ind}_Trio.snp_FNR.vcf 
+cat ${ind}_Trio.snp_FNR.vcf | wc -l > ${ind}_FNR_Numerator.txt
