@@ -1,0 +1,55 @@
+###LRS
+ind=$(sed -n ${SLURM_ARRAY_TASK_ID}p T4.list)
+mkdir tmp
+export TMPDIR=tmp
+
+singularity exec -B /scratch/ /projappl/project_2007037/deepvariant_1.6.1.sif \
+/opt/deepvariant/bin/run_deepvariant \
+--model_type=PACBIO \
+--ref Opl_hapA.fasta \
+--sample_name ${ind} \
+--reads ../${ind}.sort.bam \
+--output_vcf  ${ind}.vcf.gz \
+--output_gvcf ${ind}.gvcf.gz \
+--regions auto.bed \
+--num_shards $(nproc)
+
+singularity exec  -B /scratch/ /projappl/project_2007037/glnexus_latest.sif \
+/usr/bin/glnexus_cli \
+-m 120 \
+-t 32 \
+--dir ./${ind}_GLnexus.DB \
+--config DeepVariant_unfiltered \
+T4dam.gvcf.gz T4sire.gvcf.gz ${ind}.gvcf.gz \
+| bcftools view | bgzip > ${ind}_Trio.vcf.gz
+
+vcftools --gzvcf ${ind}_Trio.vcf.gz --remove-indels --min-alleles 2 --max-alleles 2 --recode --recode-INFO-all --out ${name}_Trio.snp
+
+#########################################################################################################################################
+
+###SRS
+ind=$(sed -n ${SLURM_ARRAY_TASK_ID}p T4.list)
+mkdir tmp
+export TMPDIR=tmp
+
+singularity exec -B /scratch/ /projappl/project_2007037/deepvariant_1.6.1.sif \
+/opt/deepvariant/bin/run_deepvariant \
+--model_type=WGS \
+--ref Opl_hapA.fasta \
+--sample_name ${ind} \
+--reads /scratch/project_2007037/05.DNM/01.DNBseq/02.bwa/${ind}.markdup.bam \
+--output_vcf  ${ind}.vcf.gz \
+--output_gvcf ${ind}.gvcf.gz \
+--regions auto.bed \
+--num_shards $(nproc) 
+
+singularity exec  -B /scratch/ /projappl/project_2007037/glnexus_latest.sif \
+/usr/bin/glnexus_cli \
+-m 120 \
+-t 32 \
+--dir ./${ind}_GLnexus.DB \
+--config DeepVariant_unfiltered \
+T4dam.gvcf.gz T4sire.gvcf.gz ${ind}.gvcf.gz \
+| bcftools view | bgzip > ${ind}_Trio.vcf.gz
+
+vcftools --gzvcf ${ind}_Trio.vcf.gz --remove-indels --min-alleles 2 --max-alleles 2 --recode --recode-INFO-all --out ${name}_Trio.snp
