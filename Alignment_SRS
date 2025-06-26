@@ -7,6 +7,7 @@ bwa index -a is hapA.fasta
 
 PL=DNBseq
 
+## set the input file to process
 ind=$(sed -n ${SLURM_ARRAY_TASK_ID}p ./job.list)
 
 bwa mem -t8 -M \
