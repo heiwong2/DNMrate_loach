@@ -1,0 +1,37 @@
+#### Set the input file to process
+indsrs=$(sed -n ${SLURM_ARRAY_TASK_ID}p /scratch/project_2007037/05.DNM/01.DNBseq/06.downsample/SRS_T4.list)
+indlrs=$(sed -n ${SLURM_ARRAY_TASK_ID}p /scratch/project_2007037/05.DNM/02.Revio/04.downsample/LRS_T4.list)
+
+module load samtools
+
+samtools merge -@ 8 - ${indsrs}.sort.bam ${indsrs}.sort.bam | samtools sort -@ 8 -o ${indsrs}.hybrid.bam
+samtools index ${indsrs}.hybrid.bam
+
+mkdir tmp
+
+export TMPDIR=tmp
+
+singularity exec -B /scratch/ /projappl/project_2007037/deepvariant_1.6.1.sif \
+/opt/deepvariant/bin/run_deepvariant \
+  --model_type "HYBRID_PACBIO_ILLUMINA" \
+  --ref Opl_hapA.fasta \
+  --reads ${indsrs}.hybrid.bam \
+  --output_vcf ${indsrs}.hybrid.vcf.gz \
+  --output_gvcf ${indsrs}.hybrid.g.vcf.gz \
+  --num_shards $(nproc) \
+  --regions auto.bed
+
+module load biokit
+
+name=$(sed -n ${SLURM_ARRAY_TASK_ID}p T4_offspring.txt)
+
+singularity exec  -B /scratch/ /projappl/project_2007037/glnexus_latest.sif \
+/usr/bin/glnexus_cli \
+-m 120 \
+-t 32 \
+--dir ./${name}_GLnexus.DB \
+--config DeepVariant_unfiltered \
+T4dam.hybrid.g.vcf.gz T4sire.hybrid.g.vcf.gz ${name}.hybrid.g.vcf.gz \
+| bcftools view | bgzip > ${name}_Trio.vcf.gz
+
+vcftools --gzvcf ${name}_Trio.vcf.gz --remove-indels --min-alleles 2 --max-alleles 2 --recode --recode-INFO-all --out ${name}_Trio.snp
