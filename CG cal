@@ -1,0 +1,74 @@
+## set the input file to process
+ind=$(sed -n ${SLURM_ARRAY_TASK_ID}p ../T4.list)
+
+module load biokit
+#extract non Hom sites for dam
+bcftools view -g ^hom ${ind}_T4dam.g.vcf.gz -o nonhom_${ind}_T4dam.vcf
+# extract out of DP range sites for dam
+# DP various on SRS & LRS
+bcftools view -i 'DP<16 || DP>65 || MIN_DP<16 || MIN_DP>65' ${ind}_T4dam.g.vcf.gz -o DP_${ind}_T4dam.vcf
+
+#tranform to bed.file
+awk 'BEGIN {OFS="\t"} !/^#/ {print $1, $2-1, $2}' nonhom_${ind}_T4dam.vcf > nonhom_${ind}_T4dam.bed
+awk 'BEGIN {OFS="\t"} 
+          !/^#/ {
+       split($8, info, ";");
+       end = $2;  # 默认 END=POS
+       for (i in info) {
+         if (info[i] ~ /^END=/) {
+           split(info[i], arr, "=");
+           end = arr[2];
+           break;
+         }
+       }
+       print $1, $2-1, end
+     }' DP_${ind}_T4dam.vcf > DP_${ind}_T4dam.bed
+     
+#extract non Hom sites for sire
+bcftools view -g ^hom ${ind}_T4sire.g.vcf.gz -o nonhom_${ind}_T4sire.vcf
+#extract out of DP range sites for sire
+bcftools view -i 'DP<16 || DP>65 || MIN_DP<16 || MIN_DP>65' ${ind}_T4sire.g.vcf.gz -o DP_${ind}_T4sire.vcf
+
+awk 'BEGIN {OFS="\t"} !/^#/ {print $1, $2-1, $2}' nonhom_${ind}_T4sire.vcf > nonhom_${ind}_T4sire.bed
+awk 'BEGIN {OFS="\t"} 
+     !/^#/ {
+       split($8, info, ";");
+       end = $2;  # 默认 END=POS
+       for (i in info) {
+         if (info[i] ~ /^END=/) {
+           split(info[i], arr, "=");
+           end = arr[2];
+           break;
+         }
+       }
+       print $1, $2-1, end
+     }' DP_${ind}_T4sire.vcf > DP_${ind}_T4sire.bed
+     
+cat nonhom_${ind}_T4dam.bed DP_${ind}_T4dam.bed nonhom_${ind}_T4sire.bed DP_${ind}_T4sire.bed | bedtools sort | bedtools merge > ${ind}_todelete.bed
+ 
+#extract DP ranger sites for offspring ( DP various on LRS & SRS
+bcftools view -e 'DP<16 || DP>65 || MIN_DP<16 || MIN_DP>65' T4O1_add.g.vcf.gz -o DP_T4O1_add.vcf
+bcftools view -e 'DP<13 || DP>55 || MIN_DP<16 || MIN_DP>55' T4O2_add.g.vcf.gz -o DP_T4O2_add.vcf
+bcftools view -e 'DP<12 || DP>48 || MIN_DP<12 || MIN_DP>48' T4O3_add.g.vcf.gz -o DP_T4O3_add.vcf
+bcftools view -e 'DP<12 || DP>50 || MIN_DP<12 || MIN_DP>50' T4O4.g.vcf.gz -o DP_T4O4.vcf
+bcftools view -e 'DP<17 || DP>69 || MIN_DP<17 || MIN_DP>69' T4O5.g.vcf.gz -o DP_T4O5.vcf
+bcftools view -e 'DP<14 || DP>56 || MIN_DP<14 || MIN_DP>56' T4O6.g.vcf.gz -o DP_T4O6.vcf
+
+awk 'BEGIN {OFS="\t"} 
+     !/^#/ {
+       split($8, info, ";");
+       end = $2;  # 默认 END=POS
+       for (i in info) {
+         if (info[i] ~ /^END=/) {
+           split(info[i], arr, "=");
+           end = arr[2];
+           break;
+         }
+       }
+       print $1, $2-1, end
+     }' DP_${ind}.vcf > DP_${ind}.bed
+
+#delete bed and calculate CG
+bedtools subtract -a DP_${ind}.bed -b ${ind}_todelete.bed | bedtools merge > ${ind}_CG.bed
+bedtools subtract -a ${ind}_CG.bed -b sexchr.bed | bedtools merge \
+| awk 'BEGIN {sum=0} {sum+=$3-$2}vi sex END {print sum}' > ${ind}_CG.txt
