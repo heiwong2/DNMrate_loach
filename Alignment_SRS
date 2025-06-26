@@ -1,0 +1,30 @@
+module load samtools
+#samtools  1.16.1  environment loaded
+module load bwa
+#BWA  0.7.17  environment loaded
+Index the reference genome
+bwa index -a is hapA.fasta
+
+PL=DNBseq
+
+ind=$(sed -n ${SLURM_ARRAY_TASK_ID}p ./job.list)
+
+bwa mem -t8 -M \
+-R "@RG\tID:${ind}\tSM:${ind}\tPL:${PL}\tLB:${ind}\tPU:1" \
+hapA.fasta \
+/scratch/project_2007037/05.DNM/01.DNBseq/01.fastp/${ind}_1.fastp.fq.gz \
+/scratch/project_2007037/05.DNM/01.DNBseq/01.fastp/${ind}_2.fastp.fq.gz \
+| samtools view -h -b \
+| samtools sort -O bam -o ${ind}.sort.bam
+
+##sort by name (-n)
+samtools sort -n ${ind}.sort.bam -O bam -o ${ind}.nsort.bam
+## label for markdup (-m) using multi-cores (-@)
+samtools fixmate -@ 8 -m ${ind}.nsort.bam ${ind}.fixmate.bam
+## sort by coordinates
+samtools sort ${ind}.fixmate.bam -O bam -o ${ind}.fixmate.sort.bam
+samtools index ${ind}.fixmate.sort.bam
+
+## mark duplicates
+samtools markdup ${ind}.fixmate.sort.bam ${ind}.markdup.bam
+samtools index ${ind}.markdup.bam
