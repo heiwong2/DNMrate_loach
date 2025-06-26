@@ -1,0 +1,81 @@
+###LRS
+# set the input file to process
+name=$(sed -n ${SLURM_ARRAY_TASK_ID}p job.list)
+module load biokit
+
+mkdir ${name}_tmp
+export TMPDIR=${name}_tmp
+
+paste <(echo ../${name}.sort.bam | sed 's/.sort.bam//g') \
+<(samtools depth ../${name}.sort.bam | awk '{sum+=$3; sumsq+=$3*$3} END { print "Average = ",sum/NR; print "Stdev = ",sqrt(sumsq/NR - (sum/NR)**2)}') >> ${name}.coverage.txt
+
+singularity exec --nv -B /scratch/ /scratch/project_2007037/deeptrio_1.6.1.sif \
+/opt/deepvariant/bin/deeptrio/run_deeptrio \
+  --model_type PACBIO \
+  --ref ../hapA.fasta \
+  --reads_child ../${name}.sort.bam \
+  --reads_parent1 ../T4sire.sort.bam \
+  --reads_parent2 ../T4dam.sort.bam \
+  --output_vcf_child /01.gvcf/${name}.vcf.gz \
+  --output_vcf_parent1 /01.gvcf/T4sire_${name}.vcf.gz \
+  --output_vcf_parent2 /01.gvcf/T4dam_${name}.vcf.gz \
+  --sample_name_child '${name}' \
+  --sample_name_parent1 'T4sire_${name}' \
+  --sample_name_parent2 'T4dam_${name}' \
+  --num_shards $(nproc) \
+  --regions auto.bed \
+  --intermediate_results_dir ${name}/intermediate_results_dir \
+  --output_gvcf_child /01.gvcf/${name}.g.vcf.gz \
+  --output_gvcf_parent1 /01.gvcf/T4sire_${name}.g.vcf.gz \
+  --output_gvcf_parent2 /01.gvcf/T4dam_${name}.g.vcf.gz
+
+singularity exec  -B /scratch/ /projappl/project_2007037/glnexus_latest.sif \
+/usr/bin/glnexus_cli \
+-m 120 \
+-t 32 \
+--dir ./${name}_GLnexus.DB \
+--config DeepVariant_unfiltered \
+./${name}_*.g.vcf.gz \
+| bcftools view | bgzip > ./${name}_Trio.vcf.gz
+
+vcftools --gzvcf ./${name}_Trio.vcf.gz --remove-indels --min-alleles 2 --max-alleles 2 --recode --recode-INFO-all --out ./${name}_Trio.snp   
+
+#########################################################################################################################################################
+
+###SRS
+# set the input file to process
+name=$(sed -n ${SLURM_ARRAY_TASK_ID}p job.list)
+module load biokit
+
+mkdir ${name}_tmp
+export TMPDIR=${name}_tmp
+
+singularity exec --nv -B /scratch/ /projappl/project_2007037/deeptrio_1.6.1.sif \
+/opt/deepvariant/bin/deeptrio/run_deeptrio \
+  --model_type WGS \
+  --ref /scratch/project_2007037/05.DNM/01.DNBseq/02.bwa/hapA.fasta \
+  --reads_child ./${name}.markdup.bam \
+  --reads_parent1 ./T4F.markdup.bam \
+  --reads_parent2 ./T4M.markdup.bam \
+  --output_vcf_child ./${name}_${name}.vcf.gz \
+  --output_vcf_parent1 ./${name}_T4F.vcf.gz \
+  --output_vcf_parent2 ./${name}_T4M.vcf.gz \
+  --sample_name_child '${name}' \
+  --sample_name_parent1 'T4F' \
+  --sample_name_parent2 'T4M' \
+  --num_shards $(nproc) \
+  --regions auto.bed \
+  --output_gvcf_child ./${name}_${name}.g.vcf.gz \
+  --output_gvcf_parent1 ./${name}_T4F.g.vcf.gz \
+  --output_gvcf_parent2 ./${name}_T4M.g.vcf.gz
+
+singularity exec  -B /scratch/ /projappl/project_2007037/glnexus_latest.sif \
+/usr/bin/glnexus_cli \
+-m 120 \
+-t 32 \
+--dir ./${name}_GLnexus.DB \
+--config DeepVariant_unfiltered \
+./${name}_*.g.vcf.gz \
+| bcftools view | bgzip > ./${name}_Trio.vcf.gz
+
+vcftools --gzvcf ./${name}_Trio.vcf.gz --remove-indels --min-alleles 2 --max-alleles 2 --recode --recode-INFO-all --out ./${name}_Trio.snp
