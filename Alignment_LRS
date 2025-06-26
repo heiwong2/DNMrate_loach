@@ -1,0 +1,10 @@
+## set the input file to process
+name=$(sed -n ${SLURM_ARRAY_TASK_ID}p job.list)
+
+module load minimap2
+module load samtools
+
+minimap2 -ax map-hifi -a -k 19 -O 5,56 -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no hapA.fasta ./01.rawdata/${name}.fq > ./03.newmap/${name}.aln.sam
+samtools view -b -S ./03.newmap/${name}.aln.sam > ./03.newmap/${name}.aln.bam
+samtools sort ./03.newmap/${name}.aln.bam -O bam -o ./03.newmap/${name}.sort.bam
+samtools index ./03.newmap/${name}.sort.bam
